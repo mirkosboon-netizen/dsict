@@ -20,6 +20,7 @@ ap.add_argument("--C2M", required=True, help="monitor.csv from C2 run")
 os.makedirs("graphs", exist_ok=True)
 
 args = ap.parse_args()
+#Load data, monitor should not include first 30s (warmup) and last 50s (cooldown)
 load_baseline = pd.read_csv(args.baselineL)
 monitor_baseline = pd.read_csv(args.baselineM)[29:751]
 
@@ -32,6 +33,7 @@ monitor_c1 = pd.read_csv(args.C1M)[29:751]
 load_c2 = pd.read_csv(args.C2L)
 monitor_c2 = pd.read_csv(args.C2M)[29:751]
 
+# Convert timestamp to seconds since start
 monitor_baseline["t"] = round(monitor_baseline["ts"] - monitor_baseline["ts"].min() + 1)
 monitor_no_jit["t"] = round(monitor_no_jit["ts"] - monitor_no_jit["ts"].min() + 1)
 monitor_c1["t"] = round(monitor_c1["ts"] - monitor_c1["ts"].min() + 1)
@@ -42,6 +44,7 @@ load_no_jit["t"] = round(load_no_jit["ts"] - load_no_jit["ts"].min() + 1)
 load_c1["t"] = round(load_c1["ts"] - load_c1["ts"].min() + 1)   
 load_c2["t"] = round(load_c2["ts"] - load_c2["ts"].min() + 1)
 
+# Because data is bursty, make more readable by smoothing with rolling average (window=10s)
 monitor_baseline['power_smooth'] = monitor_baseline['power_w'].rolling(window=10, center=True).mean()
 monitor_no_jit['power_smooth'] = monitor_no_jit['power_w'].rolling(window=10, center=True).mean()
 monitor_c1['power_smooth'] = monitor_c1['power_w'].rolling(window=10, center=True).mean()
@@ -53,6 +56,7 @@ plt.plot(monitor_baseline["t"], monitor_baseline["power_smooth"], label="Baselin
 plt.plot(monitor_no_jit["t"], monitor_no_jit["power_smooth"], label="No-JIT (W)")
 plt.plot(monitor_c1["t"], monitor_c1["power_smooth"], label="C1 (W)")
 plt.plot(monitor_c2["t"], monitor_c2["power_smooth"], label="C2 (W)")
+# Plot the high intensity periods
 plt.axvline(x=240, color='red', linestyle='--', label='start high intensity')
 plt.axvline(x=360, color='blue', linestyle='--', label='end high intensity')
 plt.axvline(x=600, color='red', linestyle='--', label='start high intensity')
@@ -63,10 +67,10 @@ plt.legend(
     bbox_to_anchor=(0.5, -0.2),  # move it below the axes
     ncol=2                       # make it spread out horizontally
 )
-
 plt.tight_layout()
 plt.savefig("graphs/plot_power.png")
 
+# Because data is bursty, make more readable by smoothing with rolling average (window=10s)
 load_baseline['rps_smooth'] = load_baseline['rps'].rolling(window=10, center=True).mean()
 load_no_jit['rps_smooth'] = load_no_jit['rps'].rolling(window=10, center=True).mean()
 load_c1['rps_smooth'] = load_c1['rps'].rolling(window=10, center=True).mean()
@@ -78,11 +82,12 @@ plt.plot(load_baseline["t"], load_baseline["rps_smooth"], label="Baseline")
 plt.plot(load_no_jit["t"], load_no_jit["rps_smooth"], label="No-JIT")
 plt.plot(load_c1["t"], load_c1["rps_smooth"], label="C1")
 plt.plot(load_c2["t"], load_c2["rps_smooth"], label="C2")
+# Plot the high intensity periods
 plt.axvline(x=240, color='red', linestyle='--', label='start high intensity')
 plt.axvline(x=360, color='blue', linestyle='--', label='end high intensity')
 plt.axvline(x=600, color='red', linestyle='--', label='start high intensity')
 plt.axvline(x=720, color='blue', linestyle='--', label='end high intensity')
-plt.xlabel("Time (s)"); plt.ylabel("Watts"); plt.title("RPS over time (Rolling average 10s)")
+plt.xlabel("Time (s)"); plt.ylabel("Requests"); plt.title("RPS over time (Rolling average 10s)")
 plt.legend(
     loc='upper center',          # put it at the center horizontally
     bbox_to_anchor=(0.5, -0.2),  # move it below the axes
@@ -97,6 +102,8 @@ plt.scatter(load_baseline["t"], load_baseline["p95_ms"], label = "Baseline", s=1
 plt.scatter(load_no_jit["t"], load_no_jit["p95_ms"], label = "No-JIT", s=10)
 plt.scatter(load_c1["t"], load_c1["p95_ms"], label = "C1", s=10)
 plt.scatter(load_c2["t"], load_c2["p95_ms"], label = "C2", s=10)
+
+# Plot the high intensity periods
 plt.axvline(x=240, color='red', linestyle='--', label='start high intensity')
 plt.axvline(x=360, color='blue', linestyle='--', label='end high intensity')
 plt.axvline(x=600, color='red', linestyle='--', label='start high intensity')
@@ -114,6 +121,8 @@ plt.savefig("graphs/plot_latency_p95.png")
 # Figure 4: Total enery (J) bar chart
 plt.figure()
 names = ["C2","C1","Baseline", "No-JIT"]
+
+# Manually Sorted from lowest to highest energy consumption, for better visualization
 values = [
     monitor_c2["energy_j_total"].iloc[-1],
     monitor_c1["energy_j_total"].iloc[-1],
@@ -121,7 +130,9 @@ values = [
     monitor_no_jit["energy_j_total"].iloc[-1],    
 ]
 
+
 plt.bar(names, values, color=["green", "yellow", "orange", "red"])
+# Increase Y limit to not cutoff difference annotation
 plt.ylim(0, max(values) * 1.25)
 bar_width = 0.8
 
@@ -154,16 +165,20 @@ for i in range(len(names)-1):
 plt.savefig("graphs/plot_total_energy.png")
 
 # Figure 5: Energy per Request
+# PUse smoothed RPS, as RPS is bursty and would lead to extreme outliers
 load_baseline['energy_per_req'] = monitor_baseline["power_w"]/load_baseline['rps_smooth']
 load_no_jit['energy_per_req'] = monitor_no_jit["power_w"]/load_no_jit['rps_smooth']
 load_c1['energy_per_req'] = monitor_c1["power_w"]/load_c1['rps_smooth']
 load_c2['energy_per_req'] = monitor_c2["power_w"]/load_c2['rps_smooth']
 
 plt.figure()
+# Use scatter plot to show all points, as line plot would interpolate between points and mislead
 plt.scatter(load_baseline["t"], load_baseline["energy_per_req"], label = "Baseline", s=10)
 plt.scatter(load_no_jit["t"], load_no_jit["energy_per_req"], label = "No-JIT", s=10)
 plt.scatter(load_c1["t"], load_c1["energy_per_req"], label = "C1", s=10)
 plt.scatter(load_c2["t"], load_c2["energy_per_req"], label = "C2", s=10)
+
+# Plot the high intensity periods
 plt.axvline(x=240, color='red', linestyle='--', label='start high intensity')
 plt.axvline(x=360, color='blue', linestyle='--', label='end high intensity')
 plt.axvline(x=600, color='red', linestyle='--', label='start high intensity')
