@@ -73,12 +73,13 @@ public WorkResponse imageCompress(@RequestBody WorkRequest req) throws IOExcepti
     long start = System.nanoTime();
 
     // configuration (guarded)
+    // Increasing these past the current limits results in memory errors
     int width       = 512;
     int height      = 512;
     int images      = Math.max(1,   Math.min(req.getPayloadSize(), 500)); 
     int iterations  = Math.max(1,   Math.min(req.getIterations(), 50));   
 
-    // Generate some random images
+    // Generate some random images using bytes in memory
     BufferedImage[] imgs = new BufferedImage[images];
     ThreadLocalRandom rnd = ThreadLocalRandom.current();
 
@@ -116,6 +117,7 @@ public WorkResponse imageCompress(@RequestBody WorkRequest req) throws IOExcepti
         }
     }
 
+    // Cleanup
     jpgWriter.dispose();
 
     long elapsedMs = (System.nanoTime() - start) / 1_000_000L;
