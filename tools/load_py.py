@@ -3,6 +3,7 @@ import argparse, asyncio, time, json, csv
 import httpx
 import random
 
+# Setup URL and bodies
 cpu_url = "http://localhost:8080/work/cpu"
 files_url = "http://localhost:8080/work/files"
 compress_url = "http://localhost:8080/work/image-compress"
@@ -11,6 +12,7 @@ body_cpu = {"payloadSize": 100000, "iterations": 10}
 body_files = {"payloadSize": 5, "fileSize": 10000}
 body_compress = {"payloadSize": 5, "iterations": 1}
 
+# List of (url, body) tuples to choose from randomly
 targets = [
     (cpu_url, body_cpu),
     (files_url, body_files),
@@ -18,13 +20,15 @@ targets = [
     ]
 
 async def worker(client, stop_evt, out_q, rps_per_worker):
+    #If requests are handled too fast, this is the interval it will wait for
     interval = 1.0 / rps_per_worker
     while not stop_evt.is_set():
         t_start = time.perf_counter()
-
+        # Pick a random target to simulate mixed load
         url, body = random.choice(targets)
         code = -1
         try:
+            # It awaits the full response to ensure the server actually processed it, this can rate limit the experiment
             r = await client.post(url, json=body, timeout=5.0)
             await r.aread()
             code = r.status_code
@@ -36,7 +40,7 @@ async def worker(client, stop_evt, out_q, rps_per_worker):
             break
         await out_q.put((int(time.time()), dt_ms, code))
 
-        # NEW: sleep to enforce target RPS
+        # Sleep to enforce target RPS
         elapsed = time.perf_counter() - t_start
         sleep_time = max(0, interval - elapsed)
         if sleep_time > 0:
@@ -58,6 +62,7 @@ async def main():
     out_q = asyncio.Queue()
     stop_evt = asyncio.Event()
 
+    # Calculate RPS per worker
     rps_per_worker = args.targetRPS / args.concurrency
 
     async with httpx.AsyncClient(http2=False) as client:
@@ -69,19 +74,16 @@ async def main():
         await asyncio.sleep(args.warmupSec)        
 
         # record per-second buckets
+        # First call to the script has a warmup so we use this to recognize a new run and create a file with header
         if args.warmupSec > 0:
             print("WARMUP DONE")
             with open(args.out, "w", newline="") as f:
                 w = csv.writer(f)
                 w.writerow(["ts","rps","avg_ms","p50_ms","p95_ms","ok","err"])
                 f.flush()
+        # Here we append as subsequent calls to the script should append to the same file
         with open(args.out, "a", newline="") as f:
             w = csv.writer(f)
-            
-            # if args.concurrency > 8:
-            #     w.writerow(["High intensity"])
-            # else:
-            #     w.writerow(["Low intensity"])
 
             current_sec = int(time.time())
             lats = []
