@@ -33,6 +33,13 @@ monitor_c1 = pd.read_csv(args.C1M)[29:751]
 load_c2 = pd.read_csv(args.C2L)
 monitor_c2 = pd.read_csv(args.C2M)[29:751]
 
+# Remove energy from before t = 30s
+
+monitor_baseline["energy_j_total"] = monitor_baseline["energy_j_total"] - monitor_baseline["energy_j_total"][29]
+monitor_no_jit["energy_j_total"] = monitor_no_jit["energy_j_total"] - monitor_no_jit["energy_j_total"][29]
+monitor_c1["energy_j_total"] = monitor_c1["energy_j_total"] - monitor_c1["energy_j_total"][29]
+monitor_c2["energy_j_total"] = monitor_c2["energy_j_total"] - monitor_c2["energy_j_total"][29]
+
 # Convert timestamp to seconds since start
 monitor_baseline["t"] = round(monitor_baseline["ts"] - monitor_baseline["ts"].min() + 1)
 monitor_no_jit["t"] = round(monitor_no_jit["ts"] - monitor_no_jit["ts"].min() + 1)
@@ -120,6 +127,7 @@ plt.savefig("graphs/plot_latency_p95.png")
 
 # Figure 4: Total enery (J) bar chart
 plt.figure()
+plt.title("Total energy usage")
 names = ["C2","C1","Baseline", "No-JIT"]
 
 # Manually Sorted from lowest to highest energy consumption, for better visualization
@@ -162,7 +170,56 @@ for i in range(len(names)-1):
         f'{diff:.1f}',
         ha='center', va='bottom', fontsize=10, color='black', alpha=0.7
     )
+plt.ylabel("Energy (J)")
 plt.savefig("graphs/plot_total_energy.png")
+
+# Figure 4: Total enery (J) bar chart
+plt.figure()
+plt.title("Total energy usage")
+names = ["C2","C1","Baseline"]
+
+# Manually Sorted from lowest to highest energy consumption, for better visualization
+values = [
+    monitor_c2["energy_j_total"].iloc[-1],
+    monitor_c1["energy_j_total"].iloc[-1],
+    monitor_baseline["energy_j_total"].iloc[-1],  
+]
+
+
+plt.bar(names, values, color=["green", "yellow", "orange"])
+# Increase Y limit to not cutoff difference annotation
+plt.ylim(0, max(values) * 1.25)
+bar_width = 0.8
+
+for i in range(len(names)-1):
+    x1 = i          # left bar
+    x2 = i + 1      # right bar
+    y1 = values[i]
+    y2 = values[i+1]
+
+    # Compute x positions at 75% of left bar and 25% of right bar
+    x1 = x1 + (0.75 - 0.5) * bar_width   # 0.75 of left bar
+    x2 = x2 + (0.25 - 0.5) * bar_width   # 0.25 of right bar
+
+    # y position of bracket (just above taller bar)
+    y_bracket = max(y1, y2) + 0.05 * max(values)
+    
+    # Draw the bracket
+    plt.plot([x1, x1, x2, x2],
+             [y1, y_bracket, y_bracket, y2],
+             color='black', linewidth=1, alpha=0.7, linestyle='dashed')
+
+    # Place difference label above bracket
+    diff = y2 - y1
+    plt.text(
+        (x1 + x2) / 2,             # midpoint between bars
+        y_bracket + 0.02 * max(values),
+        f'{diff:.1f}',
+        ha='center', va='bottom', fontsize=10, color='black', alpha=0.7
+    )
+plt.ylabel("Energy (J)")
+plt.savefig("graphs/plot_total_energy_no_jit.png")
+
 
 # Figure 5: Energy per Request
 # PUse smoothed RPS, as RPS is bursty and would lead to extreme outliers
